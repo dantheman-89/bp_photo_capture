@@ -55,10 +55,12 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     const video = videoRef.current
     if (!video) return
 
+    const MAX_SIDE = 1920
+    const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight))
     const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
 
     canvas.toBlob(
       blob => {
