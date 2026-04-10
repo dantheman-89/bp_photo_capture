@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from services.llm_service import AnthropicProvider, BPReading, LLMProvider, OpenAIProvider
+
+DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 @asynccontextmanager
@@ -41,3 +45,8 @@ async def analyze(request: Request, image: UploadFile = File(...)):
     image_bytes = await image.read()
     provider: LLMProvider = request.app.state.provider
     return await provider.analyze_bp_image(image_bytes, image.content_type)
+
+
+# Serve the built React app — must come AFTER all API routes
+if DIST.exists():
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="frontend")

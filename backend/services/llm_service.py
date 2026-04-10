@@ -26,16 +26,32 @@ _PROMPT = """\
 You are a blood pressure reading extraction assistant.
 
 Your job is to examine the image and extract SYS (systolic), DIA (diastolic), \
-and Pulse values from a blood pressure monitor display.
+and Pulse values from a physical blood pressure monitor display.
 
-FIRST, determine if the image shows a blood pressure monitor:
+STEP 1 — SCREEN FRAUD DETECTION (check this first):
+Look carefully for signs that the photo was taken of a screen rather than a \
+physical monitor. These signs include:
+- A visible grid of pixels, subpixels, or RGB dot patterns
+- Moire patterns or screen glare/reflections
+- The image shows a phone, tablet, laptop, or computer monitor
+- The surrounding bezel, app UI, or browser chrome is visible
+- The display has a visible backlight glow or refresh-line artefacts
+If any of these are detected, set confidence to "failed" and set message to \
+"This appears to be a photo of a screen rather than a physical blood pressure \
+monitor. Please photograph the monitor directly."
+
+STEP 2 — SUBJECT VALIDATION:
+If it passes Step 1, confirm the image actually shows a blood pressure monitor:
 - If it clearly does not (e.g. a person, food, landscape, text document, \
   random object), set confidence to "failed" and explain in the message field.
 - If the image is too blurry, dark, or out of focus to read, set confidence \
   to "failed" and explain.
 - If the monitor display is partially cut off or obstructed, set confidence \
   to "low" or "failed" depending on how much is visible.
-- If all three values are clearly visible and legible, set confidence to "high".
+
+STEP 3 — VALUE EXTRACTION:
+- If all three values (SYS, DIA, Pulse) are clearly visible and legible, \
+  set confidence to "high".
 - If values are visible but you are uncertain about one or more digits, \
   set confidence to "low".
 
@@ -44,9 +60,7 @@ Use this exact shape:
 {"sys": <int>, "dia": <int>, "pulse": <int>, "confidence": "high"|"low"|"failed", "message": "<str or null>"}
 
 For "failed" readings, set sys/dia/pulse to 0 and put a short, \
-user-friendly explanation in message (e.g. "This does not appear to be a \
-blood pressure monitor.", "The display is too blurry to read.", \
-"The monitor screen is not visible in this photo.").
+user-friendly explanation in message.
 For "high" or "low" confidence readings, message may be null or a brief note.
 """
 

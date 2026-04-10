@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-orange: #F05A23;
+  --color-brand-pink: #ED186B;
+  --color-surface: #1e1e1e;
+  --color-surface-raised: #2a2a2a;
+  --color-success: #10b981;
+  --color-danger: #b91c1c;
+}
+
+@layer base {
+  body {
+    background-color: #121212;
+    color: #e5e5e5;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.btn-brand {
+  background: linear-gradient(to right, #F05A23 35%, #ED186B 65%);
+  color: white;
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 0.625rem 1.75rem;
+  font-size: 0.875rem;
+  letter-spacing: 0.025em;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.btn-brand:active {
+  opacity: 0.85;
+  transform: scale(0.97);
+}
+
+.btn-ghost {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  border: 1px solid #3a3a3a;
+  border-radius: 9999px;
+  padding: 0.5rem 1.25rem;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-ghost:active {
+  border-color: #555;
+  color: #e5e5e5;
+}
+
+.panel-card {
+  background-color: #1e1e1e;
+  border-top: 1px solid #2e2e2e;
+}
+
+.stat-value {
+  font-size: 2.75rem;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(to right, #F05A23 35%, #ED186B 65%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}

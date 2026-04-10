@@ -173,29 +173,59 @@ npm run build      # build static assets into frontend/dist/
 npm run preview    # preview production build locally
 ```
 
+### File structure
+
+```
+frontend/
+├── index.html
+├── vite.config.js
+├── package.json
+├── package-lock.json
+└── src/
+    ├── main.jsx               ← React entry point, mounts App into index.html
+    ├── index.css              ← single @import "tailwindcss" line
+    ├── App.jsx                ← owns all app state and the fetch call
+    └── components/
+        ├── CameraView.jsx     ← camera preview + capture button
+        └── ResultPanel.jsx    ← displays readings / spinner / errors / manual entry
+```
+
 ### Setup (first time, Windows)
 
-```bash
+Node version management uses **nvm-windows**. Install it from:
+`https://github.com/coreybutler/nvm-windows/releases` (download `nvm-setup.exe`)
+
+```powershell
+# After installing nvm-windows, open a new PowerShell window:
+nvm install lts
+nvm use lts
+
+# Scaffold (run from repo root, not frontend/):
+npm create vite@latest frontend -- --template react
+
 cd frontend
-npm create vite@latest . -- --template react
 npm install
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
+npm install -D @tailwindcss/vite   # Tailwind v4 — no postcss config or tailwind.config.js needed
 ```
+
+**Tailwind v4 wiring (already done — do not re-run):**
+- `vite.config.js` — import and add `tailwindcss()` from `@tailwindcss/vite` to `plugins`
+- `src/index.css` — contains only `@import "tailwindcss";`
+- No `tailwind.config.js`, no `postcss.config.js`
 
 ### Vite proxy (dev only)
 
-Vite dev server runs on port 5173, FastAPI on port 8000. Proxy API calls in `vite.config.js` to avoid CORS issues:
+Vite dev server runs on port 5173, FastAPI on port 8000. Configured in `vite.config.js`:
 
 ```js
-export default {
-  server: {
-    proxy: {
-      '/api': 'http://localhost:8000'
-    }
+server: {
+  proxy: {
+    '/api': 'http://localhost:8000'
   }
 }
 ```
+
+In dev, any `fetch('/api/...')` call from React is forwarded to FastAPI. In production this is not needed — FastAPI serves everything.
 
 ### package.json and package-lock.json
 
