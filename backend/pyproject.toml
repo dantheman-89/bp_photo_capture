@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11, <3.12"
 dependencies = [
     "fastapi>=0.135.2",
+    "openai>=2.31.0",
     "pydantic-settings>=2.13.1",
     "python-multipart>=0.0.22",
     "uvicorn>=0.42.0",
@@ -13,5 +14,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "anyio>=4.13.0",
+    "httpx>=0.28.1",
     "pytest>=9.0.2",
+    "pytest-anyio>=0.0.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+anyio_mode = "auto"
