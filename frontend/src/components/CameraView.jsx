@@ -16,7 +16,14 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     let cancelled = false
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode }, audio: false })
+      .getUserMedia({
+        video: {
+          facingMode,
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
+        },
+        audio: false,
+      })
       .then(stream => {
         if (cancelled) {
           stream.getTracks().forEach(t => t.stop())
