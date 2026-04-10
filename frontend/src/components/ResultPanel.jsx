@@ -1,5 +1,4 @@
 export default function ResultPanel({ appState, reading, failCount, maxAttempts, onRetake }) {
-  const remaining = maxAttempts - failCount
 
   if (appState === 'idle') {
     return (
@@ -69,8 +68,8 @@ export default function ResultPanel({ appState, reading, failCount, maxAttempts,
         </p>
         <p className="text-xs text-gray-600">
           Attempt {failCount} of {maxAttempts}
-          {remaining <= 3 && (
-            <span style={{ color: '#b91c1c' }}> — {remaining} remaining</span>
+          {(maxAttempts - failCount) <= 3 && (
+            <span style={{ color: '#b91c1c' }}> — {maxAttempts - failCount} remaining</span>
           )}
         </p>
         <button onClick={onRetake} className="btn-brand">

@@ -15,7 +15,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 bp_photo_capture/        ← repo root
 ├── backend/             ← Python / FastAPI
 ├── frontend/            ← React + Vite + Tailwind CSS
-└── infra/               ← deployment config
+├── Dockerfile           ← multi-stage build (Node → Python)
+└── .dockerignore
 ```
 
 Each subdirectory manages its own environment. The root is not a Python or Node package.
@@ -24,15 +25,29 @@ Each subdirectory manages its own environment. The root is not a Python or Node 
 
 Single container: Vite builds static assets into `frontend/dist/`, FastAPI serves both the API and those static files.
 
+- `Dockerfile` lives at repo root — standard placement for monorepos
+- Stage 1 (Node): runs `npm run build`, produces `frontend/dist/`
+- Stage 2 (Python): installs backend deps via uv, copies `dist/` from Stage 1
+- `frontend/dist/` is git-ignored — always built inside Docker, never committed
+- Deployed on Render as a Docker web service; set `OPENAI_API_KEY` as an env var in Render dashboard
+
+### Local Docker test
+
+```bash
+docker build -t bp-monitor .
+docker run -p 8000:8000 -e OPENAI_API_KEY=your_key bp-monitor
+# visit http://localhost:8000
+```
+
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React, Vite, Tailwind CSS |
+| Frontend | React 19, Vite 8, Tailwind CSS v4 |
 | Backend | Python 3.11, FastAPI, Uvicorn |
 | Config | pydantic-settings + `.env` |
 | File uploads | python-multipart |
-| LLM (default) | OpenAI gpt-4.5-mini via `openai` SDK |
+| LLM (default) | OpenAI via `openai` SDK |
 | Testing | pytest, pytest-anyio |
 | Package mgr (backend) | uv |
 | Package mgr (frontend) | npm |
@@ -103,7 +118,7 @@ Pydantic Settings class reading from `.env`:
 class Settings(BaseSettings):
     openai_api_key: str
     anthropic_api_key: str = ""
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173"]  # override via CORS_ORIGINS in prod
     active_provider: str = "openai"
 
     model_config = SettingsConfigDict(env_file=".env")
@@ -111,12 +126,16 @@ class Settings(BaseSettings):
 
 Copy `.env.example` to `.env` and fill in values. Never commit `.env`.
 
+In production, CORS is not triggered (same-origin requests). The default value is safe to leave as-is for a single-container deploy.
+
 ### API endpoints (main.py)
 
 No `routers/` folder — endpoints are defined directly on `app` in `main.py`.
 
 - `POST /api/analyze` — accepts multipart image upload, returns `BPReading` JSON
 - `GET /health` — returns `{"status": "ok", "provider": "<active provider name>"}`
+
+Static files are mounted at `/` after all API routes, only when `frontend/dist/` exists.
 
 ### Provider wiring (main.py)
 
@@ -143,7 +162,7 @@ async def analyze_bp_image(self, image_bytes: bytes, media_type: str) -> BPReadi
 ```
 
 **Providers:**
-- `OpenAIProvider(LLMProvider)` — default, uses `gpt-5.4-mini`, `AsyncOpenAI` client instantiated once in `__init__` and reused across requests
+- `OpenAIProvider(LLMProvider)` — default, `AsyncOpenAI` client instantiated once in `__init__` and reused across requests
 - `AnthropicProvider(LLMProvider)` — stub only, raises `NotImplementedError`
 
 Provider is selected by `active_provider` in `.env` (default: `"openai"`).
@@ -183,11 +202,11 @@ frontend/
 ├── package-lock.json
 └── src/
     ├── main.jsx               ← React entry point, mounts App into index.html
-    ├── index.css              ← single @import "tailwindcss" line
+    ├── index.css              ← single @import "tailwindcss" line + custom CSS classes
     ├── App.jsx                ← owns all app state and the fetch call
     └── components/
-        ├── CameraView.jsx     ← camera preview + capture button
-        └── ResultPanel.jsx    ← displays readings / spinner / errors / manual entry
+        ├── CameraView.jsx     ← camera preview + capture + flip button
+        └── ResultPanel.jsx    ← displays readings / spinner / errors
 ```
 
 ### Setup (first time, Windows)
@@ -210,7 +229,7 @@ npm install -D @tailwindcss/vite   # Tailwind v4 — no postcss config or tailwi
 
 **Tailwind v4 wiring (already done — do not re-run):**
 - `vite.config.js` — import and add `tailwindcss()` from `@tailwindcss/vite` to `plugins`
-- `src/index.css` — contains only `@import "tailwindcss";`
+- `src/index.css` — contains `@import "tailwindcss"` plus custom classes (`btn-brand`, `btn-ghost`, `stat-value`, `panel-card`)
 - No `tailwind.config.js`, no `postcss.config.js`
 
 ### Vite proxy (dev only)
@@ -219,6 +238,7 @@ Vite dev server runs on port 5173, FastAPI on port 8000. Configured in `vite.con
 
 ```js
 server: {
+  host: true,  // reachable from other devices on the same WiFi
   proxy: {
     '/api': 'http://localhost:8000'
   }
@@ -232,16 +252,24 @@ In dev, any `fetch('/api/...')` call from React is forwarded to FastAPI. In prod
 - `package.json` — dependencies and scripts; analogous to `pyproject.toml`
 - `package-lock.json` — exact locked tree; analogous to `uv.lock`. Commit both.
 - `node_modules/` — do not commit
+- `dist/` — do not commit; always built inside Docker
 
 ### Frontend UX states
 
-1. **Initial** — live camera preview, "Take photo" button, empty result panel
-2. **Processing** — frozen captured image, loading indicator in result panel
-3. **Success** — SYS / DIA / Pulse displayed, Retake + Submit buttons
-4. **Low confidence** — prompt user to retake
-5. **Repeated failure (3×)** — allow manual entry
+The app has 6 states managed in `App.jsx`:
 
-Only show controls relevant to the current state. Layout: top ~2/3 camera/image, bottom ~1/3 result panel.
+| State | Trigger | UI |
+|---|---|---|
+| `idle` | Initial / after retake | Live camera, shutter + flip buttons |
+| `processing` | Photo taken | Frozen image, spinner |
+| `success` | `confidence === 'high'` | SYS / DIA / Pulse readings, "Take another" |
+| `low` | `confidence !== 'high'`, under 10 attempts | Warning message, attempt counter, retry |
+| `network_err` | 502/503/504 or fetch TypeError | Connection error message, retry |
+| `exhausted` | 10 consecutive non-high results | Contact customer service message, no retry |
+
+- Fail count resets to 0 on a successful reading
+- Network errors do not increment the fail count
+- No manual entry — users must contact support after exhausting attempts
 
 ---
 

@@ -8,7 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from config import settings
 from services.llm_service import AnthropicProvider, BPReading, LLMProvider, OpenAIProvider
 
-DIST = Path(__file__).parent.parent / "frontend" / "dist"
+# Works in both dev (repo root = parent of backend/) and Docker (WORKDIR=/app, dist copied to /app/frontend/dist)
+DIST = (Path(__file__).parent / "frontend" / "dist").resolve()
+if not DIST.exists():
+    DIST = (Path(__file__).parent.parent / "frontend" / "dist").resolve()
 
 
 @asynccontextmanager

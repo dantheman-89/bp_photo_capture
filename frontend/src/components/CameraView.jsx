@@ -5,34 +5,35 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
   const streamRef = useRef(null)
   const [facingMode, setFacingMode] = useState('environment') // 'environment' = rear, 'user' = front
 
-  // Restart camera whenever appState becomes idle or facingMode changes
   useEffect(() => {
-    if (appState === 'idle') {
-      startCamera()
-    } else {
-      stopCamera()
+    if (appState !== 'idle') {
+      stopStream()
+      return
     }
-    return () => stopCamera()
+
+    // Track whether this effect run has been superseded — prevents attaching
+    // a stream that resolved after the component unmounted or deps changed
+    let cancelled = false
+
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode }, audio: false })
+      .then(stream => {
+        if (cancelled) {
+          stream.getTracks().forEach(t => t.stop())
+          return
+        }
+        streamRef.current = stream
+        if (videoRef.current) videoRef.current.srcObject = stream
+      })
+      .catch(err => console.error('Camera access denied:', err))
+
+    return () => {
+      cancelled = true
+      stopStream()
+    }
   }, [appState, facingMode])
 
-  async function startCamera() {
-    try {
-      // Stop any existing stream before starting a new one (important when flipping)
-      stopCamera()
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-        audio: false,
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
-    } catch (err) {
-      console.error('Camera access denied:', err)
-    }
-  }
-
-  function stopCamera() {
+  function stopStream() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
