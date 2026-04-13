@@ -18,8 +18,33 @@ export default function App() {
   const [reading, setReading] = useState(null)
   const [failCount, setFailCount] = useState(0)
 
-  async function handleCapture(blob, dataUrl) {
+  async function handleCapture({ blob, dataUrl, monitorCheck }) {
     setCapturedImage(dataUrl)
+
+    if (monitorCheck?.isMonitorPhoto) {
+      setReading({
+        sys: 0,
+        dia: 0,
+        pulse: 0,
+        confidence: 'failed',
+        message: monitorCheck.message,
+      })
+      setAppState('screened_out')
+      return
+    }
+
+    if (!blob) {
+      setReading({
+        sys: 0,
+        dia: 0,
+        pulse: 0,
+        confidence: 'failed',
+        message: 'Unable to prepare this photo for analysis. Please try again.',
+      })
+      setAppState('low')
+      return
+    }
+
     setAppState('processing')
 
     try {

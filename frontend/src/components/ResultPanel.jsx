@@ -79,6 +79,25 @@ export default function ResultPanel({ appState, reading, failCount, maxAttempts,
     )
   }
 
+  if (appState === 'screened_out') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
+        <div className="flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
+          <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
+            Screen photo blocked
+          </span>
+        </div>
+        <p className="text-sm text-gray-400 leading-relaxed">
+          {reading?.message || 'Please photograph the blood pressure monitor directly, not another screen.'}
+        </p>
+        <button onClick={onRetake} className="btn-brand">
+          Take another
+        </button>
+      </div>
+    )
+  }
+
   if (appState === 'network_err') {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">

@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import { detectMonitorPhoto } from '../utils/monitorSpoofDetector'
 
 export default function CameraView({ appState, capturedImage, onCapture, failCount, maxAttempts }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const [facingMode, setFacingMode] = useState('environment') // 'environment' = rear, 'user' = front
+
+  function stopStream() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (appState !== 'idle') {
@@ -40,13 +48,6 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     }
   }, [appState, facingMode])
 
-  function stopStream() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-  }
-
   function handleFlip() {
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
   }
@@ -55,21 +56,23 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     const video = videoRef.current
     if (!video) return
 
-    const MAX_SIDE = 1920
-    const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight))
     const canvas = document.createElement('canvas')
-    canvas.width = Math.round(video.videoWidth * scale)
-    canvas.height = Math.round(video.videoHeight * scale)
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    canvas.toBlob(
-      blob => {
-        const dataUrl = canvas.toDataURL('image/jpeg')
-        onCapture(blob, dataUrl)
-      },
-      'image/jpeg',
-      0.9
-    )
+    const monitorCheck = detectMonitorPhoto(canvas)
+    const dataUrl = buildPreview(canvas)
+
+    if (monitorCheck.isMonitorPhoto) {
+      onCapture({ dataUrl, monitorCheck })
+      return
+    }
+
+    canvas.toBlob(blob => {
+      if (!blob) return
+      onCapture({ blob, dataUrl, monitorCheck })
+    }, 'image/jpeg', 0.95)
   }
 
   const isIdle = appState === 'idle'
@@ -156,4 +159,19 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
       )}
     </div>
   )
+}
+
+function buildPreview(sourceCanvas) {
+  const MAX_SIDE = 1600
+  const scale = Math.min(1, MAX_SIDE / Math.max(sourceCanvas.width, sourceCanvas.height))
+
+  if (scale === 1) {
+    return sourceCanvas.toDataURL('image/jpeg', 0.9)
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(sourceCanvas.width * scale)
+  canvas.height = Math.round(sourceCanvas.height * scale)
+  canvas.getContext('2d').drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.9)
 }
