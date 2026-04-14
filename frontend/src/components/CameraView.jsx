@@ -1,83 +1,86 @@
 import { useEffect, useRef, useState } from 'react'
 import { detectMonitorPhoto } from '../utils/monitorSpoofDetector'
 
-export default function CameraView({ appState, capturedImage, onCapture, failCount, maxAttempts }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const [facingMode, setFacingMode] = useState('environment') // 'environment' = rear, 'user' = front
-  const [cameraError, setCameraError] = useState(null)
+const RESOLUTION_TIERS = [
+  { width: { ideal: 3840 }, height: { ideal: 2160 } },
+  { width: { ideal: 1920 }, height: { ideal: 1080 } },
+  { width: { ideal: 1280 }, height: { ideal: 720 } },
+  {},
+]
 
-  function stopStream() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-  }
-
-  // Tiered resolution fallback — tries 4K first, steps down to 1080p, 720p,
-  // then bare constraints. Older iPhones (and some WebViews) reject high-res
-  // ideal constraints outright; each tier catches that and retries lower.
-  async function startCamera(facing) {
-    const tiers = [
-      { facingMode: facing, width: { ideal: 3840 }, height: { ideal: 2160 } },
-      { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
-      { facingMode: facing },
-    ]
-    for (const videoConstraints of tiers) {
+// Tries each resolution tier in order, falling back on OverconstrainedError or similar.
+// Races against a 30-second timeout to unstick iOS getUserMedia hangs.
+async function startCamera(facingMode) {
+  async function tryTiers() {
+    for (let i = 0; i < RESOLUTION_TIERS.length; i++) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
+        return await navigator.mediaDevices.getUserMedia({
+          video: { facingMode, ...RESOLUTION_TIERS[i] },
           audio: false,
         })
-        return stream
-      } catch (err) {
-        const isLast = videoConstraints === tiers[tiers.length - 1]
-        if (isLast) throw err
-        // Non-final failure — try the next tier
+      } catch {
+        if (i === RESOLUTION_TIERS.length - 1) throw new Error('camera unavailable')
       }
     }
   }
 
-  useEffect(() => {
-    if (appState !== 'idle') {
-      stopStream()
-      return
-    }
+  return Promise.race([
+    tryTiers(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 30000)),
+  ])
+}
 
-    // Track whether this effect run has been superseded — prevents attaching
-    // a stream that resolved after the component unmounted or deps changed
+function buildPreview(sourceCanvas) {
+  const MAX_SIDE = 1600
+  const scale = Math.min(1, MAX_SIDE / Math.max(sourceCanvas.width, sourceCanvas.height))
+  if (scale === 1) return sourceCanvas.toDataURL('image/jpeg', 0.9)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(sourceCanvas.width * scale)
+  canvas.height = Math.round(sourceCanvas.height * scale)
+  canvas.getContext('2d').drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+export default function CameraView({ appState, capturedImage, onCapture, failCount, maxAttempts }) {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [facingMode, setFacingMode] = useState('environment')
+  const [cameraError, setCameraError] = useState(null)
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current = null
+  }
+
+  useEffect(() => {
+    if (appState !== 'idle') { stopStream(); return }
+
     let cancelled = false
     setCameraError(null)
 
     startCamera(facingMode)
       .then(stream => {
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop())
-          return
-        }
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
         streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
+        const video = videoRef.current
+        if (!video) return
+        video.srcObject = stream
+        video.play().catch(() => {})
+        // GPU kick: promotes the video element to its own compositing layer,
+        // fixing the WKWebView black-frame rendering bug (WeChat, iOS in-app browsers)
+        requestAnimationFrame(() => {
+          if (videoRef.current) videoRef.current.style.webkitTransform = 'translateZ(0)'
+        })
       })
       .catch(err => {
-        if (!cancelled) {
-          console.error('Camera access failed:', err)
-          setCameraError('Camera access was denied or unavailable. Please check your permissions in Settings and try again.')
-        }
+        if (cancelled) return
+        console.error('Camera failed:', err)
+        setCameraError('Camera access was denied or unavailable. Please check your permissions in Settings and try again.')
       })
 
-    return () => {
-      cancelled = true
-      stopStream()
-    }
+    return () => { cancelled = true; stopStream() }
   }, [appState, facingMode])
-
-  function handleFlip() {
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
-  }
 
   function handleCapture() {
     const video = videoRef.current
@@ -102,41 +105,37 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     }, 'image/jpeg', 0.95)
   }
 
-  const isIdle = appState === 'idle'
   const attemptsLeft = maxAttempts - failCount
 
   return (
     <div className="relative w-full h-full overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>
-      {isIdle ? (
+      {appState !== 'idle' ? (
         <>
-          {cameraError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round" className="w-12 h-12 opacity-50">
-                <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                <line x1="2" y1="2" x2="22" y2="22" />
-              </svg>
-              <p className="text-sm leading-relaxed" style={{ color: '#9ca3af' }}>{cameraError}</p>
-            </div>
-          ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
+          <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+          {appState === 'processing' && (
+            <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} />
           )}
+        </>
+      ) : cameraError ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round" className="w-12 h-12 opacity-50">
+            <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+            <path d="M3 3l18 18" />
+          </svg>
+          <p className="text-sm leading-relaxed" style={{ color: '#9ca3af' }}>{cameraError}</p>
+        </div>
+      ) : (
+        <>
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
-          {/* Viewfinder corner brackets — hidden when camera failed */}
-          {!cameraError && (
+          {/* Viewfinder corner brackets */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-6 left-6 w-10 h-10 border-t-2 border-l-2 border-white opacity-60 rounded-tl-sm" />
             <div className="absolute top-6 right-6 w-10 h-10 border-t-2 border-r-2 border-white opacity-60 rounded-tr-sm" />
             <div className="absolute bottom-20 left-6 w-10 h-10 border-b-2 border-l-2 border-white opacity-60 rounded-bl-sm" />
             <div className="absolute bottom-20 right-6 w-10 h-10 border-b-2 border-r-2 border-white opacity-60 rounded-br-sm" />
           </div>
-          )}
 
           {/* Attempt counter — only show after first failure */}
           {failCount > 0 && (
@@ -152,12 +151,10 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
             </div>
           )}
 
-          {/* Bottom controls row: flip button + shutter + spacer (for visual balance) */}
-          {!cameraError && <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-10">
-
-            {/* Flip camera button */}
+          {/* Bottom controls: flip + shutter + spacer */}
+          <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-10">
             <button
-              onClick={handleFlip}
+              onClick={() => setFacingMode(m => m === 'environment' ? 'user' : 'environment')}
               aria-label="Flip camera"
               className="w-11 h-11 rounded-full flex items-center justify-center"
               style={{ backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)' }}
@@ -168,7 +165,6 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
               </svg>
             </button>
 
-            {/* Shutter button */}
             <button
               onClick={handleCapture}
               aria-label="Take photo"
@@ -181,37 +177,10 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
               <div className="w-6 h-6 rounded-full bg-white opacity-90" />
             </button>
 
-            {/* Spacer to keep shutter centred */}
-            <div className="w-11 h-11" />
-          </div>}
-        </>
-      ) : (
-        <>
-          <img
-            src={capturedImage}
-            alt="Captured"
-            className="w-full h-full object-cover"
-          />
-          {appState === 'processing' && (
-            <div className="absolute inset-0" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} />
-          )}
+            <div className="w-11 h-11" /> {/* spacer keeps shutter centred */}
+          </div>
         </>
       )}
     </div>
   )
-}
-
-function buildPreview(sourceCanvas) {
-  const MAX_SIDE = 1600
-  const scale = Math.min(1, MAX_SIDE / Math.max(sourceCanvas.width, sourceCanvas.height))
-
-  if (scale === 1) {
-    return sourceCanvas.toDataURL('image/jpeg', 0.9)
-  }
-
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(sourceCanvas.width * scale)
-  canvas.height = Math.round(sourceCanvas.height * scale)
-  canvas.getContext('2d').drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height)
-  return canvas.toDataURL('image/jpeg', 0.9)
 }

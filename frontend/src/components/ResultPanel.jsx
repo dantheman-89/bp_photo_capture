@@ -47,89 +47,56 @@ export default function ResultPanel({ appState, reading, failCount, maxAttempts,
           <Divider />
           <Stat label="Pulse" value={reading.pulse} unit="bpm" />
         </div>
-        <button onClick={onRetake} className="btn-ghost mt-1">
-          Take another
-        </button>
+        <button onClick={onRetake} className="btn-ghost mt-1">Take another</button>
       </div>
     )
   }
 
+  const attemptsLeft = maxAttempts - failCount
+
   if (appState === 'low') {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
-          <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
-            Low confidence
-          </span>
-        </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
-          {reading?.message || 'Ensure the monitor display is clearly visible and well-lit.'}
-        </p>
+      <AlertPanel
+        label="Low confidence"
+        message={reading?.message || 'Ensure the monitor display is clearly visible and well-lit.'}
+      >
         <p className="text-xs text-gray-600">
           Attempt {failCount} of {maxAttempts}
-          {(maxAttempts - failCount) <= 3 && (
-            <span style={{ color: '#b91c1c' }}> — {maxAttempts - failCount} remaining</span>
-          )}
+          {attemptsLeft <= 3 && <span style={{ color: '#b91c1c' }}> — {attemptsLeft} remaining</span>}
         </p>
-        <button onClick={onRetake} className="btn-brand">
-          Try again
-        </button>
-      </div>
+        <button onClick={onRetake} className="btn-brand">Try again</button>
+      </AlertPanel>
     )
   }
 
   if (appState === 'screened_out') {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
-          <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
-            Screen photo blocked
-          </span>
-        </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
-          {reading?.message || 'Please photograph the blood pressure monitor directly, not another screen.'}
-        </p>
-        <button onClick={onRetake} className="btn-brand">
-          Take another
-        </button>
-      </div>
+      <AlertPanel
+        label="Screen photo blocked"
+        message={reading?.message || 'Please photograph the blood pressure monitor directly, not another screen.'}
+      >
+        <button onClick={onRetake} className="btn-brand">Take another</button>
+      </AlertPanel>
     )
   }
 
   if (appState === 'network_err') {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
-          <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
-            Connection failed
-          </span>
-        </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
-          Unable to reach the analysis service. Please check your internet connection and try again.
-        </p>
-        <button onClick={onRetake} className="btn-brand">
-          Retry
-        </button>
-      </div>
+      <AlertPanel
+        label="Connection failed"
+        message="Unable to reach the analysis service. Please check your internet connection and try again."
+      >
+        <button onClick={onRetake} className="btn-brand">Retry</button>
+      </AlertPanel>
     )
   }
 
   if (appState === 'exhausted') {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
-          <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
-            Maximum attempts reached
-          </span>
-        </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
-          We were unable to read your blood pressure monitor after {maxAttempts} attempts.
-          Please contact our customer service team for assistance.
-        </p>
+      <AlertPanel
+        label="Maximum attempts reached"
+        message={`We were unable to read your blood pressure monitor after ${maxAttempts} attempts. Please contact our customer service team for assistance.`}
+      >
         <div
           className="mt-1 px-5 py-3 rounded-xl text-sm text-gray-300 leading-relaxed"
           style={{ backgroundColor: '#2a2a2a', border: '1px solid #3a3a3a' }}
@@ -138,11 +105,26 @@ export default function ResultPanel({ appState, reading, failCount, maxAttempts,
           <p className="font-medium">1800 XXX XXXX</p>
           <p className="text-gray-500 text-xs mt-0.5">Mon – Fri, 9am – 6pm</p>
         </div>
-      </div>
+      </AlertPanel>
     )
   }
 
   return null
+}
+
+function AlertPanel({ label, message, children }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
+      <div className="flex items-center gap-1.5">
+        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#b91c1c' }} />
+        <span className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b91c1c' }}>
+          {label}
+        </span>
+      </div>
+      <p className="text-sm text-gray-400 leading-relaxed">{message}</p>
+      {children}
+    </div>
+  )
 }
 
 function Stat({ label, value, unit }) {
