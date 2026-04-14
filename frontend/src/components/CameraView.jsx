@@ -5,11 +5,37 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const [facingMode, setFacingMode] = useState('environment') // 'environment' = rear, 'user' = front
+  const [cameraError, setCameraError] = useState(null)
 
   function stopStream() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
+    }
+  }
+
+  // Tiered resolution fallback — tries 4K first, steps down to 1080p, 720p,
+  // then bare constraints. Older iPhones (and some WebViews) reject high-res
+  // ideal constraints outright; each tier catches that and retries lower.
+  async function startCamera(facing) {
+    const tiers = [
+      { facingMode: facing, width: { ideal: 3840 }, height: { ideal: 2160 } },
+      { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      { facingMode: facing },
+    ]
+    for (const videoConstraints of tiers) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false,
+        })
+        return stream
+      } catch (err) {
+        const isLast = videoConstraints === tiers[tiers.length - 1]
+        if (isLast) throw err
+        // Non-final failure — try the next tier
+      }
     }
   }
 
@@ -22,25 +48,26 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     // Track whether this effect run has been superseded — prevents attaching
     // a stream that resolved after the component unmounted or deps changed
     let cancelled = false
+    setCameraError(null)
 
-    navigator.mediaDevices
-      .getUserMedia({
-        video: {
-          facingMode,
-          width: { ideal: 3840 },
-          height: { ideal: 2160 },
-        },
-        audio: false,
-      })
+    startCamera(facingMode)
       .then(stream => {
         if (cancelled) {
           stream.getTracks().forEach(t => t.stop())
           return
         }
         streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play().catch(() => {})
+        }
       })
-      .catch(err => console.error('Camera access denied:', err))
+      .catch(err => {
+        if (!cancelled) {
+          console.error('Camera access failed:', err)
+          setCameraError('Camera access was denied or unavailable. Please check your permissions in Settings and try again.')
+        }
+      })
 
     return () => {
       cancelled = true
@@ -82,6 +109,16 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
     <div className="relative w-full h-full overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>
       {isIdle ? (
         <>
+          {cameraError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round" className="w-12 h-12 opacity-50">
+                <path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+                <line x1="2" y1="2" x2="22" y2="22" />
+              </svg>
+              <p className="text-sm leading-relaxed" style={{ color: '#9ca3af' }}>{cameraError}</p>
+            </div>
+          ) : (
           <video
             ref={videoRef}
             autoPlay
@@ -89,14 +126,17 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
             muted
             className="w-full h-full object-cover"
           />
+          )}
 
-          {/* Viewfinder corner brackets */}
+          {/* Viewfinder corner brackets — hidden when camera failed */}
+          {!cameraError && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-6 left-6 w-10 h-10 border-t-2 border-l-2 border-white opacity-60 rounded-tl-sm" />
             <div className="absolute top-6 right-6 w-10 h-10 border-t-2 border-r-2 border-white opacity-60 rounded-tr-sm" />
             <div className="absolute bottom-20 left-6 w-10 h-10 border-b-2 border-l-2 border-white opacity-60 rounded-bl-sm" />
             <div className="absolute bottom-20 right-6 w-10 h-10 border-b-2 border-r-2 border-white opacity-60 rounded-br-sm" />
           </div>
+          )}
 
           {/* Attempt counter — only show after first failure */}
           {failCount > 0 && (
@@ -113,7 +153,7 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
           )}
 
           {/* Bottom controls row: flip button + shutter + spacer (for visual balance) */}
-          <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-10">
+          {!cameraError && <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-10">
 
             {/* Flip camera button */}
             <button
@@ -143,7 +183,7 @@ export default function CameraView({ appState, capturedImage, onCapture, failCou
 
             {/* Spacer to keep shutter centred */}
             <div className="w-11 h-11" />
-          </div>
+          </div>}
         </>
       ) : (
         <>

@@ -53,6 +53,17 @@
   border-top: 1px solid #2e2e2e;
 }
 
+/* Landscape guard — shown only when device is rotated sideways */
+.landscape-guard {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .landscape-guard {
+    display: flex;
+  }
+}
+
 .stat-value {
   font-size: 2.75rem;
   font-weight: 700;

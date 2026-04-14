@@ -95,6 +95,20 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-dvh max-w-md mx-auto" style={{ backgroundColor: '#121212' }}>
+
+      {/* Landscape guard — covers the app when phone is rotated sideways */}
+      <div
+        className="landscape-guard fixed inset-0 z-50 flex-col items-center justify-center gap-4 px-8 text-center"
+        style={{ backgroundColor: '#121212' }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" style={{ width: 48, height: 48, opacity: 0.5 }}>
+          <path d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3" />
+        </svg>
+        <p style={{ color: '#9ca3af', fontSize: '0.9rem', lineHeight: 1.6 }}>
+          Please rotate your phone to portrait mode to use this app.
+        </p>
+      </div>
       <div className="flex-1 min-h-0">
         <CameraView
           appState={appState}
